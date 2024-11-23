@@ -55,12 +55,7 @@
 #define DATAMASKLOW  0b01111111
 #define DATAMASKHIGH 0b10000000
 #define BANKMASK     0b00011111
-// #define BANKMASK     0b00000111
 
-// Bank switch
-// 1: Dynamic 32 kB banks (e.g., Puppet Knight)
-// 2: Fixed 16 kB bank and dynamic 16 kB bank (e.g., Armour Force)
-unsigned int BANKSWITCH = 1;
 
 void initGPIO() {
   // Set all pins to input first.
@@ -76,9 +71,22 @@ void initGPIO() {
   gpio_set_dir( RST, GPIO_OUT );
 }
 
+
 #define ROM_BANK(N) (rom + ((N-1) * 0x4000u)) // The reason for N-1 is because rombank will be accessed with a base of (0x4000) + the bank relative address
 
 // pico pi 2040: 264kB of SRAM, 2MB of flash storage
+
+const unsigned char * p_rombank_offsets[] = {
+    ROM_BANK(1),  ROM_BANK(1),  // 32K (Note: Bank 0 select points to Bank 1)
+    ROM_BANK(2),  ROM_BANK(3),  // 64K
+    ROM_BANK(4),  ROM_BANK(5),  ROM_BANK(6),  ROM_BANK(7), // 128K
+    ROM_BANK(8),  ROM_BANK(9),  ROM_BANK(10), ROM_BANK(11),
+    ROM_BANK(12), ROM_BANK(13), ROM_BANK(14), ROM_BANK(15), // 256K
+    ROM_BANK(16), ROM_BANK(17), ROM_BANK(18), ROM_BANK(19),
+    ROM_BANK(20), ROM_BANK(21), ROM_BANK(22), ROM_BANK(23),
+    ROM_BANK(24), ROM_BANK(25), ROM_BANK(26), ROM_BANK(27),
+    ROM_BANK(28), ROM_BANK(29), ROM_BANK(30), ROM_BANK(31), // 512K
+};
 
 void __not_in_flash_func( handleROM() ) {
   // Initial bank, point it to BANK 1
@@ -97,106 +105,31 @@ void __not_in_flash_func( handleROM() ) {
       
       // Get data byte.
       uint8_t rombyte;
-      if ( BANKSWITCH == 1 ) {
+      // Check if in lower non-banked region
+      if ( addr < 16384 ) {
+        rombyte = rom[ addr ];
+      } else {
         rombyte = rombank[ addr ];
-        
-      } else if ( BANKSWITCH == 2 ) {
-        // Check if lower part
-        if ( addr < 16384 ) {
-          rombyte = rom[ addr ];
-        } else {
-          rombyte = rombank[ addr ];
-        }
       }
       
       uint32_t gpiobyte = 0;
-      gpiobyte |= ( ( rombyte & DATAMASKLOW ) >> 0 ) << DATAOFFSETLOW;
+      gpiobyte  =   ( rombyte & DATAMASKLOW )         << DATAOFFSETLOW;
       gpiobyte |= ( ( rombyte & DATAMASKHIGH ) >> 7 ) << DATAOFFSETHIGH;
       
       // And put it out.
-      //gpio_put_masked( DATAMASK, gpiobyte );
       gpio_put_all( gpiobyte );
       
     } else {
       // Data input.
       gpio_set_dir_in_masked( DATAMASK );
     }
-    
+
     if ( wr ) {
       uint32_t writeData;
-      // Bank change?
-      switch ( addr ) {
-        case 0x000:
-          // Bank switch type 1
-          BANKSWITCH = 1;
-          
-          writeData = ( data & LOWDATAMASK ) >> DATAOFFSETLOW;
-          if ( writeData == 0 ) {
-            rombank = rom;
-          } else if ( writeData == 1 ) {
-            rombank = rom + 32768;
-          }
-          break;
-          
-        case 0x001:
-          // Bank switch type 2
-          BANKSWITCH = 2;
-          
-          writeData = ( data & LOWDATAMASK ) & ( BANKMASK << DATAOFFSETLOW );
-
-          // Use a case structure instead of a dynamic multiplcation
-          // to hopefully speed up things.
-          switch ( writeData ) {
-            case 0:
-            case ( 1  << DATAOFFSETLOW ): rombank = ROM_BANK(1); break;
-            // End 32K
-            // 
-            case ( 2  << DATAOFFSETLOW ): rombank = ROM_BANK(2); break;
-            case ( 3  << DATAOFFSETLOW ): rombank = ROM_BANK(3); break;
-            // End 64K
-            
-            case ( 4  << DATAOFFSETLOW ): rombank = ROM_BANK(4); break;
-            case ( 5  << DATAOFFSETLOW ): rombank = ROM_BANK(5); break;
-            case ( 6  << DATAOFFSETLOW ): rombank = ROM_BANK(6); break;
-            case ( 7  << DATAOFFSETLOW ): rombank = ROM_BANK(7); break;
-            // End 128K
-            
-            case ( 8  << DATAOFFSETLOW ): rombank = ROM_BANK(8); break;
-            case ( 9  << DATAOFFSETLOW ): rombank = ROM_BANK(9); break;
-            case ( 10 << DATAOFFSETLOW ): rombank = ROM_BANK(10); break;
-            case ( 11 << DATAOFFSETLOW ): rombank = ROM_BANK(11); break;
-            case ( 12 << DATAOFFSETLOW ): rombank = ROM_BANK(12); break;
-            case ( 13 << DATAOFFSETLOW ): rombank = ROM_BANK(13); break;
-            case ( 14 << DATAOFFSETLOW ): rombank = ROM_BANK(14); break;
-            case ( 15 << DATAOFFSETLOW ): rombank = ROM_BANK(15); break;            
-            // End 256K (seems ok)
-
-            case ( 16 << DATAOFFSETLOW ): rombank = ROM_BANK(16); break;
-            case ( 17 << DATAOFFSETLOW ): rombank = ROM_BANK(17); break;
-            case ( 18 << DATAOFFSETLOW ): rombank = ROM_BANK(18); break;
-            case ( 19 << DATAOFFSETLOW ): rombank = ROM_BANK(19); break;
-            case ( 20 << DATAOFFSETLOW ): rombank = ROM_BANK(20); break;
-            case ( 21 << DATAOFFSETLOW ): rombank = ROM_BANK(21); break;
-            case ( 22 << DATAOFFSETLOW ): rombank = ROM_BANK(22); break;
-            case ( 23 << DATAOFFSETLOW ): rombank = ROM_BANK(23); break;
-            
-            case ( 24 << DATAOFFSETLOW ): rombank = ROM_BANK(24); break;
-            case ( 25 << DATAOFFSETLOW ): rombank = ROM_BANK(25); break;
-            case ( 26 << DATAOFFSETLOW ): rombank = ROM_BANK(26); break;
-            case ( 27 << DATAOFFSETLOW ): rombank = ROM_BANK(27); break;
-            case ( 28 << DATAOFFSETLOW ): rombank = ROM_BANK(28); break;
-            case ( 29 << DATAOFFSETLOW ): rombank = ROM_BANK(29); break;
-            case ( 30 << DATAOFFSETLOW ): rombank = ROM_BANK(30); break;
-            case ( 31 << DATAOFFSETLOW ): rombank = ROM_BANK(31); break;
-            // End 512K (seems ok)
-
-
-            // Something went wrong.
-            default:
-              break;
-          }
-          
-          break;
+      // Handle MD2 style bank switch register write at address 0x0001
+      if (addr == 0x0001) {
+          // rom_bank_num = ( data & LOWDATAMASK ) & ( BANKMASK << DATAOFFSETLOW );
+          rombank = p_rombank_offsets[(data >> 16) & BANKMASK];
       }
     }
   }
