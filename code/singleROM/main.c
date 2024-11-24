@@ -51,6 +51,9 @@
 #define RSTMASK     0b00010000000000000000000000000000
 #define A15MASK     0b00000000000000001000000000000000
 
+//                                    FEDCBA9876543210
+#define ADDRBANKED  0b00000000000000000100000000000000 // 0x4000 (memory region 0x4000 -> 0x7FFF)
+
 //                     76543210
 #define DATAMASKLOW  0b01111111
 #define DATAMASKHIGH 0b10000000
@@ -88,11 +91,11 @@ const unsigned char * p_rombank_offsets[] = {
     ROM_BANK(28), ROM_BANK(29), ROM_BANK(30), ROM_BANK(31), // 512K
 };
 
-void __not_in_flash_func( handleROM() ) {
+void __not_in_flash_func( handleROM_MD2() ) {
   // Initial bank, point it to BANK 1
   const uint8_t * rombank = ROM_BANK(1); // rom;
   
-  // Start endless loop.
+  // Start endless loop
   while( 1 ) {
     uint32_t data = gpio_get_all();
     uint32_t addr = data & ADDRMASK;
@@ -103,14 +106,10 @@ void __not_in_flash_func( handleROM() ) {
       // Data output.
       gpio_set_dir_out_masked( DATAMASK );
       
-      // Get data byte.
+      // Get data byte based on whether it's in upper or lower 16K rom bank region.
       uint8_t rombyte;
-      // Check if in lower non-banked region
-      if ( addr < 16384 ) {
-        rombyte = rom[ addr ];
-      } else {
-        rombyte = rombank[ addr ];
-      }
+      if ( addr & ADDRBANKED ) rombyte = rombank[ addr ];
+      else                     rombyte = rom[ addr ];
       
       uint32_t gpiobyte = 0;
       gpiobyte  =   ( rombyte & DATAMASKLOW )         << DATAOFFSETLOW;
@@ -125,7 +124,6 @@ void __not_in_flash_func( handleROM() ) {
     }
 
     if ( wr ) {
-      uint32_t writeData;
       // Handle MD2 style bank switch register write at address 0x0001
       if (addr == 0x0001) {
           // rom_bank_num = ( data & LOWDATAMASK ) & ( BANKMASK << DATAOFFSETLOW );
@@ -154,6 +152,6 @@ void main() {
   gpio_set_dir( RST, GPIO_IN );
   gpio_pull_down( RST );
   
-  handleROM();
+  handleROM_MD2();
 
 }
