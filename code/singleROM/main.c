@@ -57,7 +57,7 @@
 //                     76543210
 #define DATAMASKLOW  0b01111111
 #define DATAMASKHIGH 0b10000000
-#define BANKMASK     0b00011111
+#define BANKMASK     0b00111111  // Supports banks 0-63
 
 
 void initGPIO() {
@@ -85,10 +85,23 @@ const unsigned char * p_rombank_offsets[] = {
     ROM_BANK(4),  ROM_BANK(5),  ROM_BANK(6),  ROM_BANK(7), // 128K
     ROM_BANK(8),  ROM_BANK(9),  ROM_BANK(10), ROM_BANK(11),
     ROM_BANK(12), ROM_BANK(13), ROM_BANK(14), ROM_BANK(15), // 256K
+
     ROM_BANK(16), ROM_BANK(17), ROM_BANK(18), ROM_BANK(19),
     ROM_BANK(20), ROM_BANK(21), ROM_BANK(22), ROM_BANK(23),
     ROM_BANK(24), ROM_BANK(25), ROM_BANK(26), ROM_BANK(27),
     ROM_BANK(28), ROM_BANK(29), ROM_BANK(30), ROM_BANK(31), // 512K
+
+    ROM_BANK(32), ROM_BANK(33), ROM_BANK(34), ROM_BANK(35),
+    ROM_BANK(36), ROM_BANK(37), ROM_BANK(38), ROM_BANK(39),
+    ROM_BANK(40), ROM_BANK(41), ROM_BANK(42), ROM_BANK(43),
+    ROM_BANK(44), ROM_BANK(45), ROM_BANK(46), ROM_BANK(47),
+
+    ROM_BANK(48), ROM_BANK(49), ROM_BANK(50), ROM_BANK(51),
+    ROM_BANK(52), ROM_BANK(53), ROM_BANK(54), ROM_BANK(55),
+    ROM_BANK(56), ROM_BANK(57), ROM_BANK(58), ROM_BANK(59),
+    ROM_BANK(60), ROM_BANK(61), ROM_BANK(62), ROM_BANK(63), // 1MB
+
+
 };
 
 void __not_in_flash_func( handleROM_MD2() ) {
@@ -126,8 +139,7 @@ void __not_in_flash_func( handleROM_MD2() ) {
     if ( wr ) {
       // Handle MD2 style bank switch register write at address 0x0001
       if (addr == 0x0001) {
-          // rom_bank_num = ( data & LOWDATAMASK ) & ( BANKMASK << DATAOFFSETLOW );
-          rombank = p_rombank_offsets[(data >> 16) & BANKMASK];
+          rombank = p_rombank_offsets[(data >> DATAOFFSETLOW) & BANKMASK];
       }
     }
   }
