@@ -44,10 +44,10 @@
 // Bit masks.
 #define ADDRMASK        0b00000000000000001111111111111111
 #define DATAMASK        0b00000100011111110000000000000000
-#define BUS_DATA_BIT_7  0b00000100000000000000000000000000
 //                                        FEDCBA9876543210
 //                        FEDCBA9876543210
 #define LOWDATAMASK     0b00000000011111110000000000000000
+#define BUS_DATA_BIT_7  0b00000100000000000000000000000000
 #define NWRMASK         0b00001000000000000000000000000000
 #define RSTMASK         0b00010000000000000000000000000000
 #define A15MASK         0b00000000000000001000000000000000
@@ -83,8 +83,9 @@ void initGPIO() {
   gpio_set_dir( LED_INT, GPIO_OUT );
   
   // And reset.
-  gpio_init( RST );
-  gpio_set_dir( RST, GPIO_OUT );
+  // gpio_init( RST );
+  // gpio_set_dir( RST, GPIO_OUT );
+  gpio_set_dir( RST, GPIO_IN );
 }
 
 
@@ -151,8 +152,7 @@ void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
                 }
                 else {
                     // Data output
-
-//                    gpio_set_dir_out_masked( DATAMASK );   // This partially crashes the system ROM once enabled and cart SRAM access is attempted
+                    gpio_set_dir_out_masked( DATAMASK );
 
                     uint8_t rambyte = rambank[cart_sram_relative_addr];
 
@@ -161,7 +161,7 @@ void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
                     if (rambyte & DATA_MASK_HI) gpiobyte_out |= BUS_DATA_BIT_7;
 
                     // Put data byte out on bus
-                    gpio_put_all( gpiobyte_out );
+//                    gpio_put_all( gpiobyte_out );  // This causes the crash, presumably related to gpio_set_dir_out_masked() above
                 } 
             }
             else {
@@ -182,11 +182,7 @@ void main() {
   // Turn on LED.
   gpio_put( LED_INT, 1 );
   
-  // Reset.
-  gpio_put( RST, 1 );
-  sleep_ms( RSTMS );
-  gpio_put( RST, 0 );
-  
+
   // Set RST pin back to INPUT, so we can use GPIO_PUT as non-masked.
   gpio_set_dir( RST, GPIO_IN );
   gpio_pull_down( RST );
