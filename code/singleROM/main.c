@@ -42,23 +42,36 @@
 #define RSTMS 100
 
 // Bit masks.
-#define ADDRMASK    0b00000000000000001111111111111111
-#define DATAMASK    0b00000100011111110000000000000000
-//                                    FEDCBA9876543210
-//                    FEDCBA9876543210
-#define LOWDATAMASK 0b00000000011111110000000000000000
-#define NWRMASK     0b00001000000000000000000000000000
-#define RSTMASK     0b00010000000000000000000000000000
-#define A15MASK     0b00000000000000001000000000000000
+#define ADDRMASK        0b00000000000000001111111111111111
+#define DATAMASK        0b00000100011111110000000000000000
+#define BUS_DATA_BIT_7  0b00000100000000000000000000000000
+//                                        FEDCBA9876543210
+//                        FEDCBA9876543210
+#define LOWDATAMASK     0b00000000011111110000000000000000
+#define NWRMASK         0b00001000000000000000000000000000
+#define RSTMASK         0b00010000000000000000000000000000
+#define A15MASK         0b00000000000000001000000000000000
 
-//                                    FEDCBA9876543210
-#define ADDRBANKED  0b00000000000000000100000000000000 // 0x4000 (memory region 0x4000 -> 0x7FFF)
+//                        FEDCBA9876543210
+//                                        FEDCBA9876543210
+#define A15_TO_13_MASK  0b00000000000000001110000000000000
+#define SRAM_ADDR_MATCH 0b00000000000000001010000000000000  // If A15=HI then: Cart SRAM addrs uniquely have A14=LO, A13=HI
+#define SRAM_RANGE_MASK 0b00000000000000000001111111111111  // 0xBFFF - 0xC000 = 0x1FFF total cart SRAM range
 
-//                     76543210
-#define DATAMASKLOW  0b01111111
-#define DATAMASKHIGH 0b10000000
-#define BANKMASK     0b00111111  // Supports banks 0-63
+//                       76543210
+#define DATA_MASK_LO   0b01111111
+#define DATA_MASK_HI   0b10000000
+#define RAM_BANKMASK   0b00000011  // Supports banks 0-3 in upper nibble, here it's been downshifted by 4 bits
+#define RAM_BANK_SHIFT 4         // RAM bank bits are in the upper nibble
 
+#define RAM_BANK_COUNT         4
+#define RAM_BANK_SIZE          0x2000
+
+#define MD0_BANK_REGISTER_ADDR 0x1000 
+
+// pico pi 2040: 264kB of SRAM, 2MB of flash storage
+
+uint8_t cart_sram[RAM_BANK_COUNT * RAM_BANK_SIZE]; // 4 x 8k = 32K Cart SRAM 
 
 void initGPIO() {
   // Set all pins to input first.
@@ -75,74 +88,88 @@ void initGPIO() {
 }
 
 
-#define ROM_BANK(N) (rom + ((N-1) * 0x4000u)) // The reason for N-1 is because rombank will be accessed with a base of (0x4000) + the bank relative address
 
-// pico pi 2040: 264kB of SRAM, 2MB of flash storage
+#define RAM_BANK(N) (cart_sram + (N * RAM_BANK_SIZE))
 
-const unsigned char * p_rombank_offsets[] = {
-    ROM_BANK(1),  ROM_BANK(1),  // 32K (Note: Bank 0 select points to Bank 1)
-    ROM_BANK(2),  ROM_BANK(3),  // 64K
-    ROM_BANK(4),  ROM_BANK(5),  ROM_BANK(6),  ROM_BANK(7), // 128K
-    ROM_BANK(8),  ROM_BANK(9),  ROM_BANK(10), ROM_BANK(11),
-    ROM_BANK(12), ROM_BANK(13), ROM_BANK(14), ROM_BANK(15), // 256K
-
-    ROM_BANK(16), ROM_BANK(17), ROM_BANK(18), ROM_BANK(19),
-    ROM_BANK(20), ROM_BANK(21), ROM_BANK(22), ROM_BANK(23),
-    ROM_BANK(24), ROM_BANK(25), ROM_BANK(26), ROM_BANK(27),
-    ROM_BANK(28), ROM_BANK(29), ROM_BANK(30), ROM_BANK(31), // 512K
-
-    ROM_BANK(32), ROM_BANK(33), ROM_BANK(34), ROM_BANK(35),
-    ROM_BANK(36), ROM_BANK(37), ROM_BANK(38), ROM_BANK(39),
-    ROM_BANK(40), ROM_BANK(41), ROM_BANK(42), ROM_BANK(43),
-    ROM_BANK(44), ROM_BANK(45), ROM_BANK(46), ROM_BANK(47),
-
-    ROM_BANK(48), ROM_BANK(49), ROM_BANK(50), ROM_BANK(51),
-    ROM_BANK(52), ROM_BANK(53), ROM_BANK(54), ROM_BANK(55),
-    ROM_BANK(56), ROM_BANK(57), ROM_BANK(58), ROM_BANK(59),
-    ROM_BANK(60), ROM_BANK(61), ROM_BANK(62), ROM_BANK(63), // 1MB
-
-
+unsigned char * const p_rambank_offsets[] = {
+    RAM_BANK(0),  // 8k
+    RAM_BANK(1),  // 16k
+    RAM_BANK(2),  // 24k
+    RAM_BANK(3),  // 32k
 };
 
-void __not_in_flash_func( handleROM_MD2() ) {
-  // Initial bank, point it to BANK 1
-  const uint8_t * rombank = ROM_BANK(1); // rom;
-  
-  // Start endless loop
-  while( 1 ) {
-    uint32_t data = gpio_get_all();
-    uint32_t addr = data & ADDRMASK;
-    uint32_t wr = !( data & NWRMASK );
-    uint32_t a15 = ( data & A15MASK );
-    
-    if ( !a15 && !wr ) {
-      // Data output.
-      gpio_set_dir_out_masked( DATAMASK );
-      
-      // Get data byte based on whether it's in upper or lower 16K rom bank region.
-      uint8_t rombyte;
-      if ( addr & ADDRBANKED ) rombyte = rombank[ addr ];
-      else                     rombyte = rom[ addr ];
-      
-      uint32_t gpiobyte = 0;
-      gpiobyte  =   ( rombyte & DATAMASKLOW )         << DATAOFFSETLOW;
-      gpiobyte |= ( ( rombyte & DATAMASKHIGH ) >> 7 ) << DATAOFFSETHIGH;
-      
-      // And put it out.
-      gpio_put_all( gpiobyte );
-      
-    } else {
-      // Data input.
-      gpio_set_dir_in_masked( DATAMASK );
-    }
+void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
+    // Initial bank, point it to BANK 0
+    uint8_t * rambank = RAM_BANK(0); // rom;
 
-    if ( wr ) {
-      // Handle MD2 style bank switch register write at address 0x0001
-      if (addr == 0x0001) {
-          rombank = p_rombank_offsets[(data >> DATAOFFSETLOW) & BANKMASK];
-      }
-    }
-  }
+    // Start endless loop
+    while( 1 ) {
+
+        uint32_t bus_data = gpio_get_all();
+        uint32_t wr = !( bus_data & NWRMASK );
+        uint32_t a15 = ( bus_data & A15MASK );
+
+        // All ROM Area 0x0000 - 0x7FFF addresses will have A15 line low
+        if (!a15) {
+            // ROM Memory region
+            uint32_t addr = bus_data & ADDRMASK;
+
+            if (wr) {
+                // Data input.
+                gpio_set_dir_in_masked( DATAMASK );
+
+                // Handle MD0 style bank switch register write at address 0x1000
+                // RAM bank is in upper 4 bits of data byte (but seems limited to values 0-3)
+                if (addr == MD0_BANK_REGISTER_ADDR) {
+                    // Remap rambank to requested slice of cart SRAM buffer
+                    rambank = p_rambank_offsets[(bus_data >> (DATAOFFSETLOW + RAM_BANK_SHIFT)) & RAM_BANKMASK];
+                }
+            } else {
+                // Data input, no ROM data on cart sram
+                gpio_set_dir_in_masked( DATAMASK );
+            }
+        }
+        else {
+            // Non-ROM Memory region
+
+            // Check to see if it's a Cart SRAM region
+            // Don't have the CS pin available so have to test it this way
+            if ((bus_data & A15_TO_13_MASK) == SRAM_ADDR_MATCH) {
+                // Cart SRAM Memory Region 0xA000 - 0xBFFF
+                uint32_t cart_sram_relative_addr = (bus_data & SRAM_RANGE_MASK);
+
+                if (wr) {
+                    // Data input
+                    gpio_set_dir_in_masked( DATAMASK );                    
+
+                    uint8_t gpiobyte_in = (uint8_t)(bus_data >> DATAOFFSETLOW);
+                    // Handle non-contiguous high bit
+                    if (bus_data & BUS_DATA_BIT_7) gpiobyte_in |= DATA_MASK_HI;
+
+                    // Write the data to the RAM buffer
+                    rambank[cart_sram_relative_addr] = gpiobyte_in;
+                }
+                else {
+                    // Data output
+
+//                    gpio_set_dir_out_masked( DATAMASK );   // This partially crashes the system ROM once enabled and cart SRAM access is attempted
+
+                    uint8_t rambyte = rambank[cart_sram_relative_addr];
+
+                    uint32_t gpiobyte_out = (rambyte & DATA_MASK_LO) << DATAOFFSETLOW;
+                    // Handle non-contiguous high bit
+                    if (rambyte & DATA_MASK_HI) gpiobyte_out |= BUS_DATA_BIT_7;
+
+                    // Put data byte out on bus
+                    gpio_put_all( gpiobyte_out );
+                } 
+            }
+            else {
+                // If not cart SRAM access then revert pins to input
+                gpio_set_dir_in_masked( DATAMASK );
+            }
+        }  // End: Non-ROM memory region
+    }  // End: while(1)
 }
 
 void main() {
@@ -164,6 +191,6 @@ void main() {
   gpio_set_dir( RST, GPIO_IN );
   gpio_pull_down( RST );
   
-  handleROM_MD2();
+  handleROM_MD0_cart_SRAM();
 
 }
