@@ -57,7 +57,7 @@
 #define A15_TO_13_MASK  0b00000000000000001110000000000000
 #define SRAM_ADDR_MATCH 0b00000000000000001010000000000000  // If A15=HI then: Cart SRAM addrs uniquely have A14=LO, A13=HI
 #define SRAM_RANGE_MASK 0b00000000000000000001111111111111  // 0xBFFF - 0xC000 = 0x1FFF total cart SRAM range
-
+bank switch reg addr                      0001000000000000
 //                       76543210
 #define DATA_MASK_LO   0b01111111
 #define DATA_MASK_HI   0b10000000
@@ -102,6 +102,7 @@ unsigned char * const p_rambank_offsets[] = {
 void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
     // Initial bank, point it to BANK 0
     uint8_t * rambank = RAM_BANK(0); // rom;
+    uint8_t LED_state = 1;
 
     // Start endless loop
     while( 1 ) {
@@ -112,8 +113,15 @@ void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
 
         // All ROM Area 0x0000 - 0x7FFF addresses will have A15 line low
         if (!a15) {
+
+// NONE OF THIS CODE EVER SEEMS TO EXECUTE, Maybe when system ROM is active the entire ROM region is masked off from the ROM cart slot region
+
             // ROM Memory region
             uint32_t addr = bus_data & ADDRMASK;
+
+                                // Based on LED this appears to not get called
+                                // LED_state++; //  ^= 0x01;
+                                // gpio_put( LED_INT, LED_state & 0x01 );
 
             if (wr) {
                 // Data input.
@@ -124,6 +132,10 @@ void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
                 if (addr == MD0_BANK_REGISTER_ADDR) {
                     // Remap rambank to requested slice of cart SRAM buffer
                     rambank = p_rambank_offsets[(bus_data >> (DATAOFFSETLOW + RAM_BANK_SHIFT)) & RAM_BANKMASK];
+
+                                // Based on LED this appears to not get called
+                                // LED_state++; //  ^= 0x01;
+                                // gpio_put( LED_INT, LED_state & 0x01 );
                 }
             } else {
                 // Data input, no ROM data on cart sram
@@ -149,10 +161,14 @@ void __not_in_flash_func( handleROM_MD0_cart_SRAM() ) {
 
                     // Write the data to the RAM buffer
                     rambank[cart_sram_relative_addr] = gpiobyte_in;
+
+                            // Based on LED this does appear to get accessed
+                                // LED_state ^= 0x01;
+                                // gpio_put( LED_INT, LED_state );
                 }
                 else {
                     // Data output
-                    gpio_set_dir_out_masked( DATAMASK );
+//                    gpio_set_dir_out_masked( DATAMASK );
 
                     uint8_t rambyte = rambank[cart_sram_relative_addr];
 
