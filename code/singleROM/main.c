@@ -105,7 +105,8 @@ unsigned char * const p_rambank_offsets[] = {
 #define ROM_BANK(N) (rom + (N * ROM_BANK_SIZE))
 
 const unsigned char * p_rombank_offsets[] = {
-    ROM_BANK(0),  ROM_BANK(1),  // 64K
+    ROM_BANK(0),  // 32K
+    ROM_BANK(1),  // 64K
     ROM_BANK(2),  ROM_BANK(3),  // 128K
     ROM_BANK(4),  ROM_BANK(5),  
     ROM_BANK(6),  ROM_BANK(7),  // 256K
@@ -118,7 +119,7 @@ const unsigned char * p_rombank_offsets[] = {
 
 void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
     // Initial bank, point it to BANK 0 for both
-    uint8_t * rambank = RAM_BANK(0);       // SRAM
+          uint8_t * rambank = RAM_BANK(0); // SRAM
     const uint8_t * rombank = ROM_BANK(0); // ROM
 
     // Start endless loop
@@ -151,7 +152,7 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
               gpio_set_dir_out_masked( DATAMASK );
               
               // Get data byte based on whether it's in upper or lower 16K rom bank region.
-              uint8_t rombyte = rom[addr];
+              uint8_t rombyte = rombank[addr];
               
               uint32_t gpiobyte  = ( rombyte & DATA_MASK_LO ) << DATAOFFSETLOW;
                        gpiobyte |= ( ( rombyte & DATA_MASK_HI ) >> 7 ) << DATAOFFSETHIGH;
@@ -162,7 +163,8 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
         }
         else {
             // Non-ROM Memory region
-
+            gpio_set_dir_in_masked( DATAMASK );            
+/*
             // Check to see if it's a Cart SRAM region
             // Don't have the CS pin available so have to test it this way
             if ((bus_data & A15_TO_13_MASK) == SRAM_ADDR_MATCH) {
@@ -199,6 +201,7 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
                 // If not cart SRAM access then revert pins to input
                 gpio_set_dir_in_masked( DATAMASK );
             }
+*/
         }  // End: Non-ROM memory region
     }  // End: while(1)
 }
