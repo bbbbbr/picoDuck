@@ -119,20 +119,20 @@ const unsigned char * p_rombank_offsets[] = {
 
 void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
     // Initial bank, point it to BANK 0 for both
-          uint8_t * rambank = RAM_BANK(0); // SRAM
-    const uint8_t * rombank = ROM_BANK(0); // ROM
+    volatile       uint8_t * rambank = RAM_BANK(0); // SRAM
+    volatile const uint8_t * rombank = ROM_BANK(0); // ROM
 
     // Start endless loop
     while( 1 ) {
 
         uint32_t bus_data = gpio_get_all();
-        uint32_t wr = !( bus_data & NWRMASK );
         uint32_t a15 = ( bus_data & A15MASK );
 
         // All ROM Area 0x0000 - 0x7FFF addresses will have A15 line low
         if (!a15) {
-
             // ROM Memory region
+
+            uint32_t wr = !( bus_data & NWRMASK );
             uint32_t addr = bus_data & ADDRMASK;
 
             if (wr) {
@@ -141,11 +141,18 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
 
                 // Handle MD0 style bank switch register write at address 0x1000
                 if (addr == MD0_BANK_REGISTER_ADDR) {
+                    uint8_t gpiobyte_in = bus_data >> DATAOFFSETLOW;
+                    // Don't care about high bit below since not used in this MBC
+                    // if (bus_data & BUS_DATA_BIT_7) gpiobyte_in |= DATA_MASK_HI;
+
                     // Remap rambank to requested slice of cart SRAM buffer
                     // RAM bank is in upper 4 bits of data byte (but seems limited to values 0-3)
-                    rambank = p_rambank_offsets[(bus_data >> (DATAOFFSETLOW + RAM_BANK_SHIFT)) & RAM_BANKMASK];
+// uncommenting this causes a crash, does it just take too long?                    
+//                    rambank = p_rambank_offsets[(gpiobyte_in >> RAM_BANK_SHIFT) & RAM_BANKMASK];
+// This doesn't crash
+                  rambank = p_rambank_offsets[3 & RAM_BANKMASK];
                     // ROM bank is in lower 4 bits of data byte, value range 0-15
-                    rombank = p_rombank_offsets[(bus_data >> (DATAOFFSETLOW )) & ROM_BANKMASK];
+                    rombank = p_rombank_offsets[gpiobyte_in & ROM_BANKMASK];
                 }
             } else {
               // Data output
@@ -162,13 +169,12 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
             }
         }
         else {
-            // Non-ROM Memory region
-            gpio_set_dir_in_masked( DATAMASK );            
-/*
+
             // Check to see if it's a Cart SRAM region
             // Don't have the CS pin available so have to test it this way
             if ((bus_data & A15_TO_13_MASK) == SRAM_ADDR_MATCH) {
                 // Cart SRAM Memory Region 0xA000 - 0xBFFF
+                uint32_t wr = !( bus_data & NWRMASK );                
                 uint32_t cart_sram_relative_addr = (bus_data & SRAM_RANGE_MASK);
 
                 if (wr) {
@@ -181,7 +187,6 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
 
                     // Write the data to the RAM buffer
                     rambank[cart_sram_relative_addr] = gpiobyte_in;
-
                 }
                 else {
                     // Data output
@@ -201,7 +206,6 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
                 // If not cart SRAM access then revert pins to input
                 gpio_set_dir_in_masked( DATAMASK );
             }
-*/
         }  // End: Non-ROM memory region
     }  // End: while(1)
 }
