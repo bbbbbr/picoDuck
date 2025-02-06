@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "hardware/clocks.h"
 
+#include "hardware/vreg.h"
+
 #include "rom.h"
 
 // Pin Definitions.
@@ -147,15 +149,13 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
 
                     // Remap rambank to requested slice of cart SRAM buffer
                     // RAM bank is in upper 4 bits of data byte (but seems limited to values 0-3)
-// uncommenting this causes a crash, does it just take too long?                    
-//                    rambank = p_rambank_offsets[(gpiobyte_in >> RAM_BANK_SHIFT) & RAM_BANKMASK];
-// This doesn't crash
-                  rambank = p_rambank_offsets[3 & RAM_BANKMASK];
+                    rambank = p_rambank_offsets[(gpiobyte_in >> RAM_BANK_SHIFT) & RAM_BANKMASK];
+
                     // ROM bank is in lower 4 bits of data byte, value range 0-15
                     rombank = p_rombank_offsets[gpiobyte_in & ROM_BANKMASK];
                 }
             } else {
-              // Data output
+              // Data OUTPUT for ROM region 0x0000 - 0x7FFF
               gpio_set_dir_out_masked( DATAMASK );
               
               // Get data byte based on whether it's in upper or lower 16K rom bank region.
@@ -173,12 +173,12 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
             // Check to see if it's a Cart SRAM region
             // Don't have the CS pin available so have to test it this way
             if ((bus_data & A15_TO_13_MASK) == SRAM_ADDR_MATCH) {
-                // Cart SRAM Memory Region 0xA000 - 0xBFFF
+
                 uint32_t wr = !( bus_data & NWRMASK );                
                 uint32_t cart_sram_relative_addr = (bus_data & SRAM_RANGE_MASK);
 
                 if (wr) {
-                    // Data input
+                    // Data INPUT for Cart SRAM region 0xA000 - 0xBFFF
                     gpio_set_dir_in_masked( DATAMASK );                    
 
                     uint8_t gpiobyte_in = (uint8_t)(bus_data >> DATAOFFSETLOW);
@@ -189,7 +189,7 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
                     rambank[cart_sram_relative_addr] = gpiobyte_in;
                 }
                 else {
-                    // Data output
+                    // Data OUTPUT for Cart SRAM region 0xA000 - 0xBFFF
                     gpio_set_dir_out_masked( DATAMASK );
 
                     uint8_t rambyte = rambank[cart_sram_relative_addr];
@@ -210,9 +210,15 @@ void __not_in_flash_func( handleROM_MD0_with_SRAM() ) {
     }  // End: while(1)
 }
 
+
 void main() {
   // Set higher freq.
-  set_sys_clock_khz(250000, true);
+  // set_sys_clock_khz(250000, true);
+
+    // 300000 seems to be the max for this cart at VREG_VOLTAGE_1_20
+    vreg_set_voltage(VREG_VOLTAGE_1_20);
+    sleep_ms(1000);
+    set_sys_clock_khz(300000, true);
   
   // Init GPIO.
   initGPIO();
@@ -230,5 +236,4 @@ void main() {
   gpio_pull_down( RST );
   
   handleROM_MD0_with_SRAM();
-
 }
